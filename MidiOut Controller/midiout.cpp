@@ -106,14 +106,14 @@ int main( void )
     //change CC #1
     //a
     if(ch == 97 && cc_1 > 1){
-        cc_1 = cc_1 - 1;
+        cc_1 = cc_1 - 3;
         cout<<cc_1;
             // Note On: 144, 64, 90
         control_change_1(midiout, cc_1, message);
     }
     //d
     if(ch == 100 && cc_1 <127){
-        cc_1 = cc_1 + 1;
+        cc_1 = cc_1 + 3;
         cout<<cc_1;
             // Note On: 144, 64, 90
         control_change_1(midiout, cc_1, message);
@@ -121,14 +121,14 @@ int main( void )
     //change CC #2
     //z
     if(ch == 122 && cc_2 > 1){
-        cc_2 = cc_2 - 1;
+        cc_2 = cc_2 - 3;
         cout<<cc_2;
             // Note On: 144, 64, 90
         control_change_2(midiout, cc_2, message);
     }
     //c
     if(ch == 99 && cc_2 < 127){
-        cc_2 = cc_2 + 1;
+        cc_2 = cc_2 + 3;
         cout<<cc_2;
             // Note On: 144, 64, 90
         control_change_2(midiout, cc_2, message);
