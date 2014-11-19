@@ -237,41 +237,9 @@ int main(int argc, char** argv)
 
 bool chooseMidiPort( RtMidiOut *rtmidi )
 {
-  std::cout << "\nWould you like to open a virtual output port? [y/N] ";
-
-  std::string keyHit;
-  std::getline( std::cin, keyHit );
-  if ( keyHit == "y" ) {
     rtmidi->openVirtualPort();
     return true;
-  }
 
-  std::string portName;
-  unsigned int i = 0, nPorts = rtmidi->getPortCount();
-  if ( nPorts == 0 ) {
-    std::cout << "No output ports available!" << std::endl;
-    return false;
-  }
-
-  if ( nPorts == 1 ) {
-    std::cout << "\nOpening " << rtmidi->getPortName() << std::endl;
-  }
-  else {
-    for ( i=0; i<nPorts; i++ ) {
-      portName = rtmidi->getPortName(i);
-      std::cout << "  Output port #" << i << ": " << portName << '\n';
-    }
-
-    do {
-      std::cout << "\nChoose a port number: ";
-      std::cin >> i;
-    } while ( i >= nPorts );
-  }
-
-  std::cout << "\n";
-  rtmidi->openPort( i );
-
-  return true;
 }
 
 void play_note( RtMidiOut *midiout, int note, vector<unsigned char>& message)
