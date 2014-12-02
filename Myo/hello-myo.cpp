@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <algorithm>
+#include <stdio.h>
 
 /********** FOR MIDI *********/
 #include <iostream>
@@ -19,6 +20,7 @@ using namespace std;
 bool chooseMidiPort( RtMidiOut *rtmidi );
 void play_note(RtMidiOut *midiout,  int note, vector<unsigned char>& message) ;
 
+int startingPitch = 50;
 
 // Platform-dependent sleep routines.
 #if defined(__WINDOWS_MM__)
@@ -85,8 +87,18 @@ public:
         currentPose = pose;
 
         // Vibrate the Myo whenever we've detected that the user has made a fist.
-        if (pose == myo::Pose::fist) {
-            myo->vibrate(myo::Myo::vibrationMedium);
+        // if (pose == myo::Pose::fist) {
+        //     myo->vibrate(myo::Myo::vibrationMedium);
+        // }
+
+        if (pose == myo::Pose::waveOut) {
+          myo->vibrate(myo::Myo::vibrationMedium);
+          startingPitch += 10;
+        }
+
+        if (pose == myo::Pose::waveIn) {
+          myo->vibrate(myo::Myo::vibrationMedium);
+          startingPitch -= 10;
         }
     }
 
@@ -129,6 +141,7 @@ public:
             // output stream (e.g. std::cout << currentPose;). In this case we want to get the pose name's length so
             // that we can fill the rest of the field with spaces below, so we obtain it as a string using toString().
             std::string poseString = currentPose.toString();
+
 
             // std::cout << '[' << (whichArm == myo::armLeft ? "L" : "R") << ']'
             //           << '[' << poseString << std::string(14 - poseString.size(), ' ') << ']';
@@ -223,7 +236,12 @@ int main(int argc, char** argv)
         // After processing events, we call the print() member function we defined above to print out the values we've
         // obtained from any events that have occurred.
         // collector.print();
-        play_note(midiout, collector.pitch_w, message);
+        int newYaw = ((collector.yaw_w) / (127.0) * (10.0)) + startingPitch;
+        std::cout << "New Val: " << newYaw << std::endl;
+        if (collector.currentPose.toString().compare("fist") == 0) {
+          play_note(midiout, newYaw, message);
+        }
+                
     }
 
     // If a standard exception occurred, we print out its message and exit.
