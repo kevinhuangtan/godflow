@@ -18,9 +18,14 @@
 using namespace std;
 
 bool chooseMidiPort( RtMidiOut *rtmidi );
-void play_note(RtMidiOut *midiout,  int note, vector<unsigned char>& message) ;
+void play_note(RtMidiOut *midiout,  int note, vector<unsigned char>& message);
+void stop_note( RtMidiOut *midiout, int note, vector<unsigned char>& message);
+void pitch_bend(RtMidiOut *midiout, int note, vector<unsigned char>& message);
 
 int startingPitch = 50;
+int currentPitch = 0;
+RtMidiOut *midiout = 0;
+std::vector<unsigned char> message;
 
 // Platform-dependent sleep routines.
 #if defined(__WINDOWS_MM__)
@@ -42,8 +47,24 @@ int startingPitch = 50;
 class DataCollector : public myo::DeviceListener {
 public:
     DataCollector()
-    : onArm(false), roll_w(0), pitch_w(0), yaw_w(0), currentPose()
+    : onArm(false), isUnlocked(false), roll_w(0), pitch_w(0), yaw_w(0), currentPoseRight(), currentPoseLeft()
     {
+    }
+
+    void onPair(myo::Myo* myo, uint64_t timestamp, myo::FirmwareVersion firmwareVersion)
+    {
+        // Print out the MAC address of the armband we paired with.
+
+        // The pointer address we get for a Myo is unique - in other words, it's safe to compare two Myo pointers to
+        // see if they're referring to the same Myo.
+
+        // Add the Myo pointer to our list of known Myo devices. This list is used to implement identifyMyo() below so
+        // that we can give each Myo a nice short identifier.
+        knownMyos.push_back(myo);
+        myo->unlock(myo::Myo::unlockHold);
+
+        // Now that we've added it to our list, get our short ID for it and print it out.
+        std::cout << "Paired with " << identifyMyo(myo) << "." << std::endl;
     }
 
     // onUnpair() is called whenever the Myo is disconnected from Myo Connect by the user.
@@ -55,17 +76,21 @@ public:
         pitch_w = 0;
         yaw_w = 0;
         onArm = false;
+        isUnlocked = false;
     }
 
     // onOrientationData() is called whenever the Myo device provides its current orientation, which is represented
     // as a unit quaternion.
     void onOrientationData(myo::Myo* myo, uint64_t timestamp, const myo::Quaternion<float>& quat)
     {
+
         using std::atan2;
         using std::asin;
         using std::sqrt;
         using std::max;
         using std::min;
+
+
 
         // Calculate Euler angles (roll, pitch, and yaw) from the unit quaternion.
         float roll = atan2(2.0f * (quat.w() * quat.x() + quat.y() * quat.z()),
@@ -76,29 +101,72 @@ public:
 
         // Convert the floating point angles in radians to a scale from 0 to 18.
         roll_w = static_cast<int>((roll + (float)M_PI)/(M_PI * 2.0f) * 127);
-        pitch_w = static_cast<int>((pitch + (float)M_PI/2.0f)/M_PI * 127);
-        yaw_w = static_cast<int>((yaw + (float)M_PI)/(M_PI * 2.0f) * 127);
+        pitch_w = static_cast<int>((pitch + (float)M_PI/2.0f)/M_PI * 5);
+        yaw_w = static_cast<int>((yaw + (float)M_PI)/(M_PI * 2.0f) * 5);
+
+        if (identifyMyo(myo) == leftMyo){
+            if ((currentPitch != (pitch_w + startingPitch)) && (currentPoseRight == myo::Pose::fist)) {
+                stop_note(midiout, currentPitch, message);
+                currentPitch = pitch_w + startingPitch;
+                play_note(midiout, currentPitch, message);
+                std::cout << "Pitch Change!" << std::endl;
+            }
+            std::cout << pitch_w << " : " << identifyMyo(myo) << std::endl << std::endl;
+            pitch_bend(midiout, roll_w, message);
+        } else if (identifyMyo(myo) == rightMyo) {
+            // pitch_bend(midiout, roll_w, message);
+        }
+        
     }
 
     // onPose() is called whenever the Myo detects that the person wearing it has changed their pose, for example,
     // making a fist, or not making a fist anymore.
     void onPose(myo::Myo* myo, uint64_t timestamp, myo::Pose pose)
     {
-        currentPose = pose;
+        if (identifyMyo(myo) == rightMyo) {
+            currentPoseRight = pose;
+        } else {
+            currentPoseLeft = pose;
+        }
 
         // Vibrate the Myo whenever we've detected that the user has made a fist.
         // if (pose == myo::Pose::fist) {
         //     myo->vibrate(myo::Myo::vibrationMedium);
         // }
 
-        if (pose == myo::Pose::waveOut) {
-          myo->vibrate(myo::Myo::vibrationMedium);
-          startingPitch += 10;
+        // if (pose != myo::Pose::unknown && pose != myo::Pose::rest) {
+        //     // Tell the Myo to stay unlocked until told otherwise. We do that here so you can hold the poses without the
+        //     // Myo becoming locked.
+        //     myo->unlock(myo::Myo::unlockHold);
+
+        //     // Notify the Myo that the pose has resulted in an action, in this case changing
+        //     // the text on the screen. The Myo will vibrate.
+        //     myo->notifyUserAction();
+        // } else {
+        //     // Tell the Myo to stay unlocked only for a short period. This allows the Myo to stay unlocked while poses
+        //     // are being performed, but lock after inactivity.
+        //     myo->unlock(myo::Myo::unlockTimed);
+        // }
+
+        // if (currentPoseLeft == myo::Pose::waveOut) {
+        //   myo->vibrate(myo::Myo::vibrationMedium);
+        //   startingPitch += 12;
+        // }
+
+        // if (currentPoseLeft == myo::Pose::waveIn) {
+        //   myo->vibrate(myo::Myo::vibrationMedium);
+        //   startingPitch -= 12;
+        // }
+
+        int midiNote = pitch_w + startingPitch;
+        std::cout << "New Val: " << midiNote << std::endl;
+        if (currentPoseRight == myo::Pose::fist) {
+            stop_note(midiout, currentPitch, message);
+            play_note(midiout, currentPitch, message);
         }
 
-        if (pose == myo::Pose::waveIn) {
-          myo->vibrate(myo::Myo::vibrationMedium);
-          startingPitch -= 10;
+        if ((currentPoseRight == myo::Pose::fingersSpread) || (currentPoseRight == myo::Pose::rest)) {
+            stop_note(midiout, currentPitch, message);
         }
     }
 
@@ -108,6 +176,14 @@ public:
     {
         onArm = true;
         whichArm = arm;
+
+        if (arm == myo::armLeft) {
+            leftMyo = identifyMyo(myo);
+        }
+        if (arm == myo::armRight){
+            rightMyo = identifyMyo(myo);
+        }
+        std::cout << "Left Myo: " << leftMyo << std::endl;
     }
 
     // onArmUnsync() is called whenever Myo has detected that it was moved from a stable position on a person's arm after
@@ -122,15 +198,32 @@ public:
     // For this example, the functions overridden above are sufficient.
 
     // We define this function to print the current values that were updated by the on...() functions above.
+    
+    // onUnlock() is called whenever Myo has become unlocked, and will start delivering pose events.
+    void onUnlock(myo::Myo* myo, uint64_t timestamp)
+    {
+        isUnlocked = true;
+    }
+
+    // onLock() is called whenever Myo has become locked. No pose events will be sent until the Myo is unlocked again.
+    void onLock(myo::Myo* myo, uint64_t timestamp)
+    {
+        isUnlocked = false;
+    }
+
+    void onOrientationData(myo::Myo* myo, uint64_t timestamp) {
+        std::cout << 'Meow' << std::endl;
+    }
+
     void print()
     {
         // Clear the current line
         std::cout << '\r';
 
         // Print out the orientation. Orientation data is always available, even if no arm is currently recognized.
-        // std::cout << '[' << std::string(roll_w, '*') << std::string(127 - roll_w, ' ') << ']'
-        //           << '[' << std::string(pitch_w, '*') << std::string(127 - pitch_w, ' ') << ']'
-        //           << '[' << std::string(yaw_w, '*') << std::string(127 - yaw_w, ' ') << ']';
+        // std::cout << '[' << std::string(roll_w, '*') << std::string(12 - roll_w, ' ') << ']'
+        //           << '[' << std::string(pitch_w, '*') << std::string(12 - pitch_w, ' ') << ']'
+        //           << '[' << std::string(yaw_w, '*') << std::string(12 - yaw_w, ' ') << ']';
 
         std::cout << pitch_w;
 
@@ -140,10 +233,10 @@ public:
             // Pose::toString() provides the human-readable name of a pose. We can also output a Pose directly to an
             // output stream (e.g. std::cout << currentPose;). In this case we want to get the pose name's length so
             // that we can fill the rest of the field with spaces below, so we obtain it as a string using toString().
-            std::string poseString = currentPose.toString();
+            // std::string poseString = currentPose.toString();
 
 
-            // std::cout << '[' << (whichArm == myo::armLeft ? "L" : "R") << ']'
+            // std::cout << '[' << (whichArm == myo::d ? "L" : "R") << ']'
             //           << '[' << poseString << std::string(14 - poseString.size(), ' ') << ']';
         } else {
             // Print out a placeholder for the arm and pose when Myo doesn't currently know which arm it's on.
@@ -153,21 +246,53 @@ public:
         std::cout << std::flush;
     }
 
+    void onConnect(myo::Myo* myo, uint64_t timestamp, myo::FirmwareVersion firmwareVersion)
+    {
+        std::cout << "Myo " << identifyMyo(myo) << " has connected." << std::endl;
+    }
+
+    void onDisconnect(myo::Myo* myo, uint64_t timestamp)
+    {
+        std::cout << "Myo " << identifyMyo(myo) << " has disconnected." << std::endl;
+    }
+
+    // This is a utility function implemented for this sample that maps a myo::Myo* to a unique ID starting at 1.
+    // It does so by looking for the Myo pointer in knownMyos, which onPair() adds each Myo into as it is paired.
+    size_t identifyMyo(myo::Myo* myo) {
+        // Walk through the list of Myo devices that we've seen pairing events for.
+        for (size_t i = 0; i < knownMyos.size(); ++i) {
+            // If two Myo pointers compare equal, they refer to the same Myo device.
+            if (knownMyos[i] == myo) {
+                return i + 1;
+            }
+        }
+
+        return 0;
+    }
+
     // These values are set by onArmSync() and onArmUnsync() above.
     bool onArm;
     myo::Arm whichArm;
 
+    bool isUnlocked;
+    int leftMyo;
+    int rightMyo;
+
+    // We store each Myo pointer that we pair with in this list, so that we can keep track of the order we've seen
+    // each Myo and give it a unique short identifier (see onPair() and identifyMyo() above).
+    std::vector<myo::Myo*> knownMyos;
+
     // These values are set by onOrientationData() and onPose() above.
     int roll_w, pitch_w, yaw_w;
-    myo::Pose currentPose;
+    // myo::Pose currentPose;
+    myo::Pose currentPoseRight;
+    myo::Pose currentPoseLeft;
 };
 
 int main(int argc, char** argv)
 {
 
-
-    RtMidiOut *midiout = 0;
-      std::vector<unsigned char> message;
+      
 
       // RtMidiOut constructor
       try {
@@ -211,15 +336,15 @@ int main(int argc, char** argv)
     // immediately.
     // waitForAnyMyo() takes a timeout value in milliseconds. In this case we will try to find a Myo for 10 seconds, and
     // if that fails, the function will return a null pointer.
-    myo::Myo* myo = hub.waitForMyo(10000);
+    // myo::Myo* myo = hub.waitForMyo(10000);
 
     // If waitForAnyMyo() returned a null pointer, we failed to find a Myo, so exit with an error message.
-    if (!myo) {
-        throw std::runtime_error("Unable to find a Myo!");
-    }
+    // if (!myo) {
+    //     throw std::runtime_error("Unable to find a Myo!");
+    // }
 
     // We've found a Myo.
-    std::cout << "Connected to a Myo armband!" << std::endl << std::endl;
+    // std::cout << "Connected to a Myo armband!" << std::endl << std::endl;
 
     // Next we construct an instance of our DeviceListener, so that we can register it with the Hub.
     DataCollector collector;
@@ -232,16 +357,14 @@ int main(int argc, char** argv)
     while (1) {
         // In each iteration of our main loop, we run the Myo event loop for a set number of milliseconds.
         // In this case, we wish to update our display 20 times a second, so we run for 1000/20 milliseconds.
-        hub.run(1000/1000);
+        hub.run(1);
+        // for (int i = 30; i < 91; i++) {
+        
+        // }
+        // std::cout << collector.pitch_w << " : " << identifyMyo(myo) << std::endl << std::endl;
         // After processing events, we call the print() member function we defined above to print out the values we've
         // obtained from any events that have occurred.
         // collector.print();
-        int newYaw = ((collector.yaw_w) / (127.0) * (10.0)) + startingPitch;
-        std::cout << "New Val: " << newYaw << std::endl;
-        if (collector.currentPose.toString().compare("fist") == 0) {
-          play_note(midiout, newYaw, message);
-        }
-                
     }
 
     // If a standard exception occurred, we print out its message and exit.
@@ -265,14 +388,23 @@ void play_note( RtMidiOut *midiout, int note, vector<unsigned char>& message)
 // Note On: 144, 64, 90
   message[0] = 144;
   message[1] = note;
-  message[2] = 80;
+  message[2] = 127;
   midiout->sendMessage( &message );
+}
 
-  SLEEP( 50 ); 
-  // Note Off: 128, 64, 40
+void stop_note( RtMidiOut *midiout, int note, vector<unsigned char>& message) {
+  // // Note Off: 128, 64, 40
   message[0] = 128;
   message[1] = note;
-  message[2] = 80;
+  message[2] = 127;
   midiout->sendMessage( &message );
+}
 
+void pitch_bend(RtMidiOut *midiout, int note, vector<unsigned char>& message) {
+    // cout << "NOTE: " << note << endl;
+    // note = (note)/127 * (74-54) + 54;
+    message[0] = 224;
+    message[1] = 127;
+    message[2] = note;
+    midiout->sendMessage( &message );
 }
