@@ -20,7 +20,8 @@ using namespace std;
 bool chooseMidiPort( RtMidiOut *rtmidi );
 void play_note(RtMidiOut *midiout,  int note, vector<unsigned char>& message);
 void stop_note( RtMidiOut *midiout, int note, vector<unsigned char>& message);
-void pitch_bend(RtMidiOut *midiout, int note, vector<unsigned char>& message);
+void pitch_bend(RtMidiOut *midiout, int cc, vector<unsigned char>& message);
+void volume_change(RtMidiOut *midiout, int cc, vector<unsigned char>& message);
 
 int startingPitch = 50;
 int currentPitch = 0;
@@ -102,7 +103,7 @@ public:
         // Convert the floating point angles in radians to a scale from 0 to 18.
         roll_w = static_cast<int>((roll + (float)M_PI)/(M_PI * 2.0f) * 127);
         pitch_w = static_cast<int>((pitch + (float)M_PI/2.0f)/M_PI * 5);
-        yaw_w = static_cast<int>((yaw + (float)M_PI)/(M_PI * 2.0f) * 5);
+        yaw_w = static_cast<int>((yaw + (float)M_PI)/(M_PI * 2.0f) * 127);
 
         if (identifyMyo(myo) == leftMyo){
             if ((currentPitch != (pitch_w + startingPitch)) && (currentPoseRight == myo::Pose::fist)) {
@@ -114,7 +115,8 @@ public:
             std::cout << pitch_w << " : " << identifyMyo(myo) << std::endl << std::endl;
             pitch_bend(midiout, roll_w, message);
         } else if (identifyMyo(myo) == rightMyo) {
-            // pitch_bend(midiout, roll_w, message);
+            // pitch_bend(midiout, roll_w, message);i
+            volume_change(midiout, yaw_w, message);
         }
         
     }
@@ -386,25 +388,34 @@ bool chooseMidiPort( RtMidiOut *rtmidi )
 void play_note( RtMidiOut *midiout, int note, vector<unsigned char>& message)
 {
 // Note On: 144, 64, 90
-  message[0] = 144;
-  message[1] = note;
-  message[2] = 127;
-  midiout->sendMessage( &message );
+  // message[0] = 144;
+  // message[1] = note;
+  // message[2] = 127;
+  // midiout->sendMessage( &message );
 }
 
 void stop_note( RtMidiOut *midiout, int note, vector<unsigned char>& message) {
   // // Note Off: 128, 64, 40
-  message[0] = 128;
-  message[1] = note;
-  message[2] = 127;
-  midiout->sendMessage( &message );
+  // message[0] = 128;
+  // message[1] = note;
+  // message[2] = 127;
+  // midiout->sendMessage( &message );
 }
 
-void pitch_bend(RtMidiOut *midiout, int note, vector<unsigned char>& message) {
+void pitch_bend(RtMidiOut *midiout, int cc, vector<unsigned char>& message) {
     // cout << "NOTE: " << note << endl;
     // note = (note)/127 * (74-54) + 54;
-    message[0] = 224;
-    message[1] = 127;
-    message[2] = note;
+    // message[0] = 224;
+    // message[1] = 127;
+    // message[2] = cc;
+    // midiout->sendMessage( &message );
+}
+
+void volume_change(RtMidiOut *midiout, int cc, vector<unsigned char>& message) {
+    cout << "NOTEDDD: " << cc << endl;
+    // note = (note)/127 * (74-54) + 54;
+    message[0] = 176;
+    message[1] = 7;
+    message[2] = cc;
     midiout->sendMessage( &message );
 }
