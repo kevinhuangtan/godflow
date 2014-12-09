@@ -47,7 +47,7 @@ std::vector<unsigned char> message;
 class DataCollector : public myo::DeviceListener {
 public:
     DataCollector()
-    : onArm(false), isUnlocked(false), roll_w(0), pitch_w(0), yaw_w(0), currentPose()
+    : onArm(false), isUnlocked(false), roll_w(0), pitch_w(0), yaw_w(0), currentPoseRight(), currentPoseLeft()
     {
     }
     void onPair(myo::Myo* myo, uint64_t timestamp, myo::FirmwareVersion firmwareVersion)
@@ -98,20 +98,35 @@ public:
         roll_w = static_cast<int>((roll + (float)M_PI)/(M_PI * 2.0f) * 127);
         pitch_w = static_cast<int>((pitch + (float)M_PI/2.0f)/M_PI * 127);
         yaw_w = static_cast<int>((yaw + (float)M_PI)/(M_PI * 2.0f) * 127);
+
+        if (identifyMyo(myo) == rightMyo) {
+          if (currentPoseRight == myo::Pose::fist){
+             control_change_1(midiout, roll_w, message);
+             control_change_2(midiout, pitch_w, message);
+          }
+        } else if (identifyMyo(myo) == leftMyo) {
+          // Do stuff
+        }
     }
 
     // onPose() is called whenever the Myo detects that the person wearing it has changed their pose, for example,
     // making a fist, or not making a fist anymore.
     void onPose(myo::Myo* myo, uint64_t timestamp, myo::Pose pose)
     {
-        currentPose = pose;
 
+        if (identifyMyo(myo) == rightMyo) {
+            currentPoseRight = pose;
+        } else {
+            currentPoseLeft = pose;
+        }
+
+        // if (identifyMyo(myo))
         // Vibrate the Myo whenever we've detected that the user has made a fist.
         // if (pose == myo::Pose::fist) {
         //     myo->vibrate(myo::Myo::vibrationMedium);
         // }
 
-        if (pose != myo::Pose::unknown && pose != myo::Pose::rest) {
+        if (currentPoseRight != myo::Pose::unknown && currentPoseRight != myo::Pose::rest) {
             // Tell the Myo to stay unlocked until told otherwise. We do that here so you can hold the poses without the
             // Myo becoming locked.
             // myo->unlock(myo::Myo::unlockHold);
@@ -126,14 +141,14 @@ public:
             myo->unlock(myo::Myo::unlockTimed);
         }
 
-        if (pose == myo::Pose::waveIn) {
+        if (currentPoseRight == myo::Pose::waveIn) {
           if (ableton_current_row > 1){
             ableton_current_row--;
             play(midiout, ableton_current_row, message);
           }
         }
 
-        if (pose == myo::Pose::waveOut) {
+        if (currentPoseRight == myo::Pose::waveOut) {
           if (ableton_current_row < 5){
             ableton_current_row++;
             play(midiout, ableton_current_row, message);
@@ -141,7 +156,7 @@ public:
         }
 
 
-        if (pose== myo::Pose::fingersSpread){
+        if (currentPoseRight== myo::Pose::fingersSpread){
           if (playing_clip == false){
             play(midiout, ableton_current_row, message);
             playing_clip = true;
@@ -153,7 +168,7 @@ public:
             }
           }
         }
-        if (pose == myo::Pose::doubleTap) {
+        if (currentPoseRight == myo::Pose::doubleTap) {
           if (isUnlocked){
             myo->lock();   
           } 
@@ -174,6 +189,13 @@ public:
     {
         onArm = true;
         whichArm = arm;
+
+        if (arm == myo::armLeft) {
+            leftMyo = identifyMyo(myo);
+        }
+        if (arm == myo::armRight){
+            rightMyo = identifyMyo(myo);
+        }
     }
 
     // onArmUnsync() is called whenever Myo has detected that it was moved from a stable position on a person's arm after
@@ -211,8 +233,10 @@ public:
             // Pose::toString() provides the human-readable name of a pose. We can also output a Pose directly to an
             // output stream (e.g. std::cout << currentPose;). In this case we want to get the pose name's length so
             // that we can fill the rest of the field with spaces below, so we obtain it as a string using toString().
-            std::string poseString = currentPose.toString();
-
+            std::string poseStringLeft = currentPoseLeft.toString();
+            std::string poseStringRight = currentPoseRight.toString();
+            std::string poseString;
+            whichArm == myo::armLeft ? poseString = poseStringLeft : poseString = poseStringRight;
             std::cout << '[' << (isUnlocked ? "unlocked" : "locked  ") << ']'
                       << '[' << (whichArm == myo::armLeft ? "L" : "R") << ']'
                       << '[' << poseString << std::string(14 - poseString.size(), ' ') << ']';
@@ -249,10 +273,12 @@ public:
     myo::Arm whichArm;
 
     bool isUnlocked;
-
+    int leftMyo;
+    int rightMyo;
     // These values are set by onOrientationData() and onPose() above.
     int roll_w, pitch_w, yaw_w;
-    myo::Pose currentPose;
+    myo::Pose currentPoseRight;
+    myo::Pose currentPoseLeft;
 };
 
 
@@ -321,12 +347,6 @@ int main(int argc, char** argv)
         hub.run(1);
 
         collector.print();
-        std::string poseString = collector.currentPose.toString();
-        if (poseString=="fist"){
-           control_change_1(midiout,  collector.roll_w, message);
-           control_change_2(midiout,  collector.pitch_w, message);
-        }
-
     }
 
     } catch (const std::exception& e) {
