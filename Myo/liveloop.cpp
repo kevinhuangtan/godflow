@@ -8,6 +8,7 @@
 #include <string>
 #include <algorithm>
 #include <stdio.h>
+#include <ctime>
 
 /********** FOR MIDI *********/
 #include <iostream>
@@ -20,15 +21,13 @@ using namespace std;
 bool chooseMidiPort( RtMidiOut *rtmidi );
 void play_note(RtMidiOut *midiout,  int note, vector<unsigned char>& message);
 void stop_note( RtMidiOut *midiout, int note, vector<unsigned char>& message);
-void pitch_bend(RtMidiOut *midiout, int cc, vector<unsigned char>& message);
-void volume_change(RtMidiOut *midiout, int cc, vector<unsigned char>& message);
 
-int startingPitch = 50;
-int currentPitch = 0;
+int recNotes [10] = {60, 61, 62, 62, 63, 63, 64, 64, 65, 65};
+int loopLocation = 0;
+int cTime = std::time(0);
 RtMidiOut *midiout = 0;
 std::vector<unsigned char> message;
 
-int intervals [8] = {0, 1, 2, 2, 3, 4, 5, 5};
 
 // Platform-dependent sleep routines.
 #if defined(__WINDOWS_MM__)
@@ -106,22 +105,6 @@ public:
         roll_w = static_cast<int>((roll + (float)M_PI)/(M_PI * 2.0f) * 127);
         pitch_w = static_cast<int>((pitch + (float)M_PI/2.0f)/M_PI * 8);
         yaw_w = static_cast<int>((yaw + (float)M_PI)/(M_PI * 2.0f) * 127);
-
-        if (identifyMyo(myo) == leftMyo){
-            if ((currentPitch != (pitch_w + startingPitch)) && (currentPoseRight == myo::Pose::fist)) {
-                stop_note(midiout, currentPitch, message);
-                currentPitch = pitch_w + startingPitch + intervals[pitch_w];
-                play_note(midiout, currentPitch, message);
-                std::cout << "Pitch Change!" << std::endl;
-            }
-            std::cout << pitch_w << " : " << identifyMyo(myo) << std::endl << std::endl;
-            // std::cout << "Roll W: " << roll_w << " : " << identifyMyo(myo) << std::endl << std::endl;
-            pitch_bend(midiout, roll_w, message);
-        } else if (identifyMyo(myo) == rightMyo) {
-            // pitch_bend(midiout, roll_w, message);i
-            volume_change(midiout, yaw_w, message);
-        }
-        
     }
 
     // onPose() is called whenever the Myo detects that the person wearing it has changed their pose, for example,
@@ -163,16 +146,17 @@ public:
         //   startingPitch -= 12;
         // }
 
-        int midiNote = pitch_w + startingPitch;
-        std::cout << "New Val: " << midiNote << std::endl;
-        if (currentPoseRight == myo::Pose::fist) {
-            stop_note(midiout, currentPitch, message);
-            play_note(midiout, currentPitch, message);
+        // cout << cTime << endl;
+        int checkTime;
+        if ((currentPoseLeft == myo::Pose::waveOut) && (loopLocation < 10)) {
+            if (((checkTime = std::time(0)) - cTime) < 2) {
+                return;
+            }
+            cTime = checkTime;
+            play_note(midiout, recNotes[loopLocation], message);
+            loopLocation++;
         }
 
-        if ((currentPoseRight == myo::Pose::fingersSpread) || (currentPoseRight == myo::Pose::rest)) {
-            stop_note(midiout, currentPitch, message);
-        }
     }
 
     // onArmSync() is called whenever Myo has recognized a Sync Gesture after someone has put it on their
@@ -394,6 +378,7 @@ void play_note( RtMidiOut *midiout, int note, vector<unsigned char>& message)
     message[0] = 144;
     message[1] = note;
     message[2] = 127;
+    std::cout << note << endl;
     midiout->sendMessage( &message );
 }
 
@@ -402,29 +387,5 @@ void stop_note( RtMidiOut *midiout, int note, vector<unsigned char>& message) {
     message[0] = 128;
     message[1] = note;
     message[2] = 127;
-    midiout->sendMessage( &message );
-}
-
-void pitch_bend(RtMidiOut *midiout, int cc, vector<unsigned char>& message) {
-    // cout << "NOTE: " << cc << endl;
-    // cout << "SENDING PITCH BEND" << endl;
-    // cc = (cc)/127 * (74-54) + 54;
-    // cout << "CC " << cc << endl;
-    message[0] = 176;
-    message[1] = 9;
-    message[2] = cc;
-    midiout->sendMessage( &message );
-}
-
-void volume_change(RtMidiOut *midiout, int cc, vector<unsigned char>& message) {
-    // note = (note)/127 * (74-54) + 54;
-    // cc = cc + 90;
-    // if (cc > 127) {
-    //     cc = 127;
-    // }
-    cout << "NOTEDDD: " << cc << endl;
-    message[0] = 176;
-    message[1] = 7;
-    message[2] = cc;
     midiout->sendMessage( &message );
 }
