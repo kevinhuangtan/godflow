@@ -22,9 +22,10 @@ bool chooseMidiPort( RtMidiOut *rtmidi );
 void play_note(RtMidiOut *midiout,  int note, vector<unsigned char>& message);
 void stop_note( RtMidiOut *midiout, int note, vector<unsigned char>& message);
 
-int recNotes [10] = {60, 61, 62, 62, 63, 63, 64, 64, 65, 65};
+int recNotes [12] = {60, 61, 62, 62, 63, 63, 64, 64, 65, 65, 66, 66};
 int loopLocation = 0;
-int cTime = std::time(0);
+// int cTime = std::time(0);
+int triggered = false;
 RtMidiOut *midiout = 0;
 std::vector<unsigned char> message;
 
@@ -103,8 +104,27 @@ public:
 
         // Convert the floating point angles in radians to a scale from 0 to 18.
         roll_w = static_cast<int>((roll + (float)M_PI)/(M_PI * 2.0f) * 127);
-        pitch_w = static_cast<int>((pitch + (float)M_PI/2.0f)/M_PI * 8);
+        pitch_w = static_cast<int>((pitch + (float)M_PI/2.0f)/M_PI * 127);
         yaw_w = static_cast<int>((yaw + (float)M_PI)/(M_PI * 2.0f) * 127);
+
+        if (identifyMyo(myo) == leftMyo){
+            cout << pitch_w << endl;
+            // int checkTime;
+            if (!(triggered) && (pitch_w > 80) && (loopLocation < 12)) {
+                cout << "GOT HERE 1" << endl;
+                // if (((checkTime = std::time(0)) - cTime) < 2) {
+                //     return;
+                // }
+                // cTime = checkTime;
+                play_note(midiout, recNotes[loopLocation], message);
+                triggered = true;
+                loopLocation++;
+            }
+            if (triggered && (pitch_w < 81)) {
+                cout << "GOT HERE 2" << endl;
+                triggered = false;
+            }
+        }
     }
 
     // onPose() is called whenever the Myo detects that the person wearing it has changed their pose, for example,
@@ -147,15 +167,15 @@ public:
         // }
 
         // cout << cTime << endl;
-        int checkTime;
-        if ((currentPoseLeft == myo::Pose::waveOut) && (loopLocation < 10)) {
-            if (((checkTime = std::time(0)) - cTime) < 2) {
-                return;
-            }
-            cTime = checkTime;
-            play_note(midiout, recNotes[loopLocation], message);
-            loopLocation++;
-        }
+        // int checkTime;
+        // if ((currentPoseLeft == myo::Pose::waveOut) && (loopLocation < 10)) {
+        //     if (((checkTime = std::time(0)) - cTime) < 2) {
+        //         return;
+        //     }
+        //     cTime = checkTime;
+        //     play_note(midiout, recNotes[loopLocation], message);
+        //     loopLocation++;
+        // }
 
     }
 

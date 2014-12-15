@@ -93,8 +93,6 @@ public:
         using std::max;
         using std::min;
 
-
-
         // Calculate Euler angles (roll, pitch, and yaw) from the unit quaternion.
         float roll = atan2(2.0f * (quat.w() * quat.x() + quat.y() * quat.z()),
                            1.0f - 2.0f * (quat.x() * quat.x() + quat.y() * quat.y()));
@@ -112,13 +110,9 @@ public:
                 stop_note(midiout, currentPitch, message);
                 currentPitch = pitch_w + startingPitch + intervals[pitch_w];
                 play_note(midiout, currentPitch, message);
-                std::cout << "Pitch Change!" << std::endl;
             }
-            std::cout << pitch_w << " : " << identifyMyo(myo) << std::endl << std::endl;
-            // std::cout << "Roll W: " << roll_w << " : " << identifyMyo(myo) << std::endl << std::endl;
             pitch_bend(midiout, roll_w, message);
         } else if (identifyMyo(myo) == rightMyo) {
-            // pitch_bend(midiout, roll_w, message);i
             volume_change(midiout, yaw_w, message);
         }
         
@@ -418,13 +412,13 @@ void pitch_bend(RtMidiOut *midiout, int cc, vector<unsigned char>& message) {
 
 void volume_change(RtMidiOut *midiout, int cc, vector<unsigned char>& message) {
     // note = (note)/127 * (74-54) + 54;
-    // cc = cc + 90;
+    cc = cc + 90;
     // if (cc > 127) {
     //     cc = 127;
     // }
-    cout << "NOTEDDD: " << cc << endl;
+    // cout << "PIZZA: " << cc << endl;
     message[0] = 176;
-    message[1] = 7;
+    message[1] = 8;
     message[2] = cc;
     midiout->sendMessage( &message );
 }
