@@ -18,12 +18,19 @@ using namespace std;
 bool chooseMidiPort( RtMidiOut *rtmidi );
 // bool chooseMidiPortIn( RtMidiIn *rtmidi );
 void play_note(RtMidiOut *midiout,  int note, vector<unsigned char>& message);
+void drum(RtMidiOut *midiout,  int note, vector<unsigned char>& message);
 void play( RtMidiOut *midiout, int row, vector<unsigned char>& message);
 void pause( RtMidiOut *midiout,vector<unsigned char>& message);
+void beat_repeat(RtMidiOut *midiout,vector<unsigned char>& message);
+void beat_on(RtMidiOut *midiout,vector<unsigned char>& message);
+void offset(RtMidiOut *midiout, int cc, vector<unsigned char>& message);
 void control_change_1( RtMidiOut *midiout, int cc, vector<unsigned char>& message);
 void control_change_2( RtMidiOut *midiout, int cc, vector<unsigned char>& message);
 int ableton_current_row = 1;
 bool playing_clip = false; 
+int drum_note_roll = 60;
+int drum_note_pitch = 60;
+int drum_note_yaw = 60;
 RtMidiOut *midiout = 0;
 std::vector<unsigned char> message;
 
@@ -59,10 +66,12 @@ public:
 
         // Add the Myo pointer to our list of known Myo devices. This list is used to implement identifyMyo() below so
         // that we can give each Myo a nice short identifier.
+        
         knownMyos.push_back(myo);
 
         // Now that we've added it to our list, get our short ID for it and print it out.
         std::cout << "Paired with " << identifyMyo(myo) << "." << std::endl;
+        
     }
 
     // onUnpair() is called whenever the Myo is disconnected from Myo Connect by the user.
@@ -100,13 +109,67 @@ public:
         yaw_w = static_cast<int>((yaw + (float)M_PI)/(M_PI * 2.0f) * 127);
 
         if (identifyMyo(myo) == rightMyo) {
-          if (currentPoseRight == myo::Pose::fist){
+          if (currentPoseRight == myo::Pose::fist && isUnlocked ==true){
              control_change_1(midiout, roll_w, message);
              control_change_2(midiout, pitch_w, message);
           }
+          if (isUnlocked ==true && pitch_w < 20){
+             std::cout<<pitch_w;
+             play(midiout, ableton_current_row, message);
+          }
         } else if (identifyMyo(myo) == leftMyo) {
-          // Do stuff
+          if (currentPoseLeft == myo::Pose::fist && isUnlocked ==true){
+            offset(midiout, roll_w, message);
+          }
+          if (isUnlocked ==true){
+             if (pitch_w>80){
+                if (drum_note_pitch!=61){
+                  drum_note_pitch = 61;
+                  drum(midiout, drum_note_pitch, message);
+                  std::cout<<"pitch";
+                }      
+             }
+             if (pitch_w<40){
+                if (drum_note_pitch!=62){
+                  drum_note_pitch = 62;
+                  drum(midiout, drum_note_pitch, message);
+                  std::cout<<"pitch";
+                }      
+             }
+             if (roll_w>75){
+                if (drum_note_roll!=63){
+                  drum_note_roll = 63;
+                  drum(midiout, drum_note_roll, message);
+                  std::cout<<"roll";
+                }      
+             }
+             // if (roll_w<70){
+             //    if (drum_note_roll!=64){
+             //      drum_note_roll = 64;
+             //      drum(midiout, drum_note_roll, message);
+             //      std::cout<<"roll";
+             //    }      
+             // }
+             // if (yaw_w>20&&yaw_w<70){
+             //    if (drum_note_yaw!=65){
+             //      drum_note_yaw = 65;
+             //      drum(midiout, drum_note_yaw, message);
+             //      std::cout<<"yaw";
+             //      std::cout<<yaw_w;
+             //    }      
+             // }
+             // if (yaw_w<10){
+             //    if (drum_note_yaw!=66){
+             //      drum_note_yaw = 66;
+             //      drum(midiout, drum_note_yaw, message);
+             //      std::cout<<"yaw";
+             //      std::cout<<yaw_w;
+             //    }      
+             // }
+                
+          }
         }
+
     }
 
     // onPose() is called whenever the Myo detects that the person wearing it has changed their pose, for example,
@@ -126,20 +189,7 @@ public:
         //     myo->vibrate(myo::Myo::vibrationMedium);
         // }
 
-        if (currentPoseRight != myo::Pose::unknown && currentPoseRight != myo::Pose::rest) {
-            // Tell the Myo to stay unlocked until told otherwise. We do that here so you can hold the poses without the
-            // Myo becoming locked.
-            // myo->unlock(myo::Myo::unlockHold);
-
-            // Notify the Myo that the pose has resulted in an action, in this case changing
-            // the text on the screen. The Myo will vibrate.
-
-            myo->notifyUserAction();
-        } else {
-            // Tell the Myo to stay unlocked only for a short period. This allows the Myo to stay unlocked while poses
-            // are being performed, but lock after inactivity.
-            myo->unlock(myo::Myo::unlockTimed);
-        }
+      
 
         if (currentPoseRight == myo::Pose::waveIn) {
           if (ableton_current_row > 1){
@@ -149,12 +199,11 @@ public:
         }
 
         if (currentPoseRight == myo::Pose::waveOut) {
-          if (ableton_current_row < 5){
+          if (ableton_current_row < 7){
             ableton_current_row++;
             play(midiout, ableton_current_row, message);
           }        
         }
-
 
         if (currentPoseRight== myo::Pose::fingersSpread){
           if (playing_clip == false){
@@ -168,18 +217,14 @@ public:
             }
           }
         }
-        if (currentPoseRight == myo::Pose::doubleTap) {
-          if (isUnlocked){
-            myo->lock();   
-          } 
-          else{
-            if(!isUnlocked){
-              myo->unlock(myo::Myo::unlockHold);
-            }
-          }
+
+        if (currentPoseLeft == myo::Pose::doubleTap) {
+          beat_on(midiout, message);
         }
 
-
+        if (currentPoseLeft == myo::Pose::waveOut) {
+          beat_repeat(midiout, message);
+        }
 
     }
 
@@ -222,34 +267,16 @@ public:
         // Clear the current line
         std::cout << '\r';
 
-        // Print out the orientation. Orientation data is always available, even if no arm is currently recognized.
-        std::cout << "roll: "<< '[' << std::string(roll_w/2, '*') << std::string((127 - roll_w)/2, ' ') << ']'<<'\n';
-        std::cout << "pitch: "<< '[' << std::string(pitch_w/2, '*') << std::string((127 - pitch_w)/2, ' ') << ']'<<'\n';
-        std::cout << "yaw: " << '[' << std::string(yaw_w/2, '*') << std::string((127 - yaw_w)/2, ' ') << ']'<<'\n';
-
-        if (onArm) {
-            // Print out the lock state, the currently recognized pose, and which arm Myo is being worn on.
-
-            // Pose::toString() provides the human-readable name of a pose. We can also output a Pose directly to an
-            // output stream (e.g. std::cout << currentPose;). In this case we want to get the pose name's length so
-            // that we can fill the rest of the field with spaces below, so we obtain it as a string using toString().
-            std::string poseStringLeft = currentPoseLeft.toString();
-            std::string poseStringRight = currentPoseRight.toString();
-            std::string poseString;
-            whichArm == myo::armLeft ? poseString = poseStringLeft : poseString = poseStringRight;
-            std::cout << '[' << (isUnlocked ? "unlocked" : "locked  ") << ']'
-                      << '[' << (whichArm == myo::armLeft ? "L" : "R") << ']'
-                      << '[' << poseString << std::string(14 - poseString.size(), ' ') << ']';
-        } else {
-            // Print out a placeholder for the arm and pose when Myo doesn't currently know which arm it's on.
-            std::cout << '[' << std::string(8, ' ') << ']' << "[?]" << '[' << std::string(14, ' ') << ']';
-        }
+        std::cout<<"roll: "<<roll_w<<" ";
+        std::cout<<"pitch: "<<pitch_w<<" ";
+        std::cout<<"yaw: "<<yaw_w<<" ";
 
         std::cout << std::flush;
     }
     void onConnect(myo::Myo* myo, uint64_t timestamp, myo::FirmwareVersion firmwareVersion)
     {
         std::cout << "Myo " << identifyMyo(myo) << " has connected." << std::endl;
+        myo->unlock(myo::Myo::unlockHold);
     }
     void onDisconnect(myo::Myo* myo, uint64_t timestamp)
     {
@@ -333,7 +360,7 @@ int main(int argc, char** argv)
     }
     std::cout << "Connected to a Myo armband!" << std::endl << std::endl;
 
-    myo->unlock(myo::Myo::unlockHold);
+
 
     // Next we construct an instance of our DeviceListener, so that we can register it with the Hub.
     DataCollector collector;
@@ -344,7 +371,7 @@ int main(int argc, char** argv)
     
     while (1) {
 
-        hub.run(1);
+        hub.run(50);
 
         collector.print();
     }
@@ -392,7 +419,6 @@ void play( RtMidiOut *midiout, int row, vector<unsigned char>& message)
   message[2] = 127;
   midiout->sendMessage( &message );
 
-  SLEEP( 50 ); 
   message[0] = 128;
   message[1] = 53 - 1 + row;
   message[2] = 127;
@@ -422,26 +448,81 @@ void pause( RtMidiOut *midiout, vector<unsigned char>& message)
 void control_change_1( RtMidiOut *midiout, int cc, vector<unsigned char>& message)
 {
   //declare cc
-  cc = cc - 40;
+  cc = cc + 50;
   message[0]=176;
   //cc channel
   message[1]=7;
-  message[2]=128 - (int) (2.5 * (double) cc);
-  std::cout << '\n';
-  std::cout<<"cc1:"<<128 - cc;
-  std::cout << std::flush;
+  message[2]=(int) (5 * (double) cc);
+
   midiout->sendMessage( &message );
 }
 void control_change_2( RtMidiOut *midiout, int cc, vector<unsigned char>& message)
 {
-  cc = cc - 40;
+  cc = cc - 30;
   //declare cc
   message[0]=176;
   //cc channel
   message[1]=8;
-  message[2]=(int) (2.5 * (double) cc);
-  std::cout << '\n';
-  std::cout<<"cc2:"<< cc;
-  std::cout << std::flush;
+  message[2]=128 -(int) (3 * (double) cc);
+
   midiout->sendMessage( &message );
+}
+void beat_repeat(RtMidiOut *midiout, vector<unsigned char>& message){
+  std::cout << '\n';
+  std::cout<<"beat repeat";
+  std::cout << std::flush;
+
+  message[0] = 144;
+  message[1] = 51;
+  message[2] = 127;
+  midiout->sendMessage( &message );
+
+  SLEEP( 50 ); 
+  message[0] = 128;
+  message[1] = 51;
+  message[2] = 127;
+  midiout->sendMessage( &message );
+}
+void beat_on(RtMidiOut *midiout, vector<unsigned char>& message){
+  std::cout << '\n';
+  std::cout<<"beat on";
+  std::cout << std::flush;
+
+  message[0] = 144;
+  message[1] = 50;
+  message[2] = 127;
+  midiout->sendMessage( &message );
+
+  SLEEP( 50 ); 
+  message[0] = 128;
+  message[1] = 50;
+  message[2] = 127;
+  midiout->sendMessage( &message );
+}
+void offset(RtMidiOut *midiout, int cc, vector<unsigned char>& message){
+ 
+  cc = cc + 40;
+  message[0]=176;
+  //cc channel
+  message[1]=9;
+  message[2]=(int) (3 * (double) cc);
+
+  midiout->sendMessage( &message );
+}
+void drum(RtMidiOut *midiout, int note, vector<unsigned char>& message){
+
+  message[0]=145;
+  //cc channel
+  message[1]=note-20;
+  message[2]=100;
+
+  midiout->sendMessage( &message );
+  SLEEP( 50 ); 
+  // Note Off: 128, 64, 40
+  message[0] = 129;
+  message[1] = note-30;
+  message[2] = 100;
+  midiout->sendMessage( &message );
+  std::cout<<note;
+
 }
